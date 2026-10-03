@@ -1,0 +1,14 @@
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0\FLAGGED.exe
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0\FLAGGED.deps.json
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0\FLAGGED.runtimeconfig.json
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0\FLAGGED.dll
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0\FLAGGED.pdb
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\FLAGGED.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\FLAGGED.AssemblyInfoInputs.cache
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\FLAGGED.AssemblyInfo.cs
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\FLAGGED.csproj.CoreCompileInputs.cache
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\FLAGGED.dll
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\refint\FLAGGED.dll
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\FLAGGED.pdb
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\FLAGGED.genruntimeconfig.cache
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0\ref\FLAGGED.dll

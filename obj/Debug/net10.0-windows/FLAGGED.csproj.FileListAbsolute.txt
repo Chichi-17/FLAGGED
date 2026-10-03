@@ -1,0 +1,15 @@
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0-windows\FLAGGED.exe
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0-windows\FLAGGED.deps.json
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0-windows\FLAGGED.runtimeconfig.json
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0-windows\FLAGGED.dll
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0-windows\FLAGGED.pdb
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\FLAGGED.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\FLAGGED.AssemblyInfoInputs.cache
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\FLAGGED.AssemblyInfo.cs
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\FLAGGED.csproj.CoreCompileInputs.cache
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\FLAGGED.dll
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\refint\FLAGGED.dll
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\FLAGGED.pdb
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\FLAGGED.genruntimeconfig.cache
+C:\Users\acer\Downloads\FLAGGED\obj\Debug\net10.0-windows\ref\FLAGGED.dll
+C:\Users\acer\Downloads\FLAGGED\bin\Debug\net10.0-windows\assets\Menu.jpg
