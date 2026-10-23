@@ -6,28 +6,29 @@ using System.Linq;
 
 namespace FLAGGED
 {
+    public interface IDisplayable
+    {
+        string Display();
+    }
+
     public static class GameRules
     {
         public static readonly Random Rng = new Random();
 
-        // ----- Day / Time -----
         public const int TotalDays = 5;
         public const int ShiftSeconds = 180;         
         public const int ArticlesPerShift = 6;        
         public const int DatabaseCheckSeconds = 5;    
 
-        // ----- Coins -----
         public const int StartingMoney = 20;
         public const int RewardCorrect = 10;          
         public const int PenaltyWrong = 5;            
 
-        // ----- Daily expenses (flat for all 5 days) -----
         public const int RentCost = 15;               
         public const int UtilitiesCost = 5;
         public const int FoodCostPerMember = 6;
         public const int MedicineCost = 10;           
 
-        // ----- Family -----
         public const int FamilySize = 2;
         public const int HungerDeathDays = 3;         
         public const int SicknessDeathDays = 3;       
@@ -45,23 +46,41 @@ namespace FLAGGED
 
 namespace FLAGGED
 {
-    public class Wallet
+    public abstract class FinancialAccount : IDisplayable
     {
-        public int Money { get; private set; }
+        private int _money;
 
-        public Wallet(int startingMoney)
+        public int Money
+        {
+            get => _money;
+            protected set => _money = Math.Max(0, value);
+        }
+
+        protected FinancialAccount(int startingMoney)
         {
             Money = startingMoney;
         }
 
-        public int Add(int amount)
+        public abstract int Add(int amount);
+        public abstract int Deduct(int amount);
+        public virtual bool CanAfford(int cost) => Money >= cost;
+        public abstract string Display();
+    }
+
+    public class Wallet : FinancialAccount
+    {
+        public Wallet() : base(GameRules.StartingMoney) { }
+
+        public Wallet(int startingMoney) : base(startingMoney) { }
+
+        public override int Add(int amount)
         {
             if (amount < 0) amount = 0;
             Money += amount;
             return amount;
         }
 
-        public int Deduct(int amount)
+        public override int Deduct(int amount)
         {
             if (amount < 0) amount = 0;
             int actual = Math.Min(amount, Money);
@@ -69,16 +88,14 @@ namespace FLAGGED
             return actual;
         }
 
-        public bool CanAfford(int cost) => Money >= cost;
-
-        public string Display() => "Money: $" + Money;
+        public override string Display() => "Money: $" + Money;
     }
 }
 
+
 namespace FLAGGED
 {
-
-    public class ShiftTimer
+    public class ShiftTimer : IDisplayable
     {
         private readonly Stopwatch _watch = new Stopwatch();
         private int _penaltySeconds;
@@ -112,32 +129,49 @@ namespace FLAGGED
             int total = RemainingSeconds;
             return (total / 60).ToString("00") + ":" + (total % 60).ToString("00");
         }
+
+        public string Display() => Format();
     }
 }
 
+
 namespace FLAGGED
 {
-
-    public class FamilyMember
+    public abstract class HouseholdEntity : IDisplayable
     {
-        public string Name { get; private set; }
-        public bool IsAlive { get; private set; } = true;
-        public bool IsSick { get; private set; }
-        public int MissedMeals { get; private set; }
-        public int SickDays { get; private set; }
-        public string CauseOfDeath { get; private set; } = "";
+        public string Name { get; protected set; }
+        public bool IsAlive { get; protected set; } = true;
+        public bool IsSick { get; protected set; }
+        public int MissedMeals { get; protected set; }
+        public int SickDays { get; protected set; }
+        public string CauseOfDeath { get; protected set; } = "";
 
-        public FamilyMember(string name)
+        protected HouseholdEntity(string name)
         {
             Name = name;
         }
 
-        public void Feed()
+        public abstract void Feed();
+        public abstract void SkipMeal();
+        public abstract void GetSick();
+        public abstract void GiveMedicine();
+        public abstract void UntreatedSicknessDay();
+
+        public abstract string Status { get; }
+
+        public virtual string Display() => Name + " - " + Status;
+    }
+
+    public class FamilyMember : HouseholdEntity
+    {
+        public FamilyMember(string name) : base(name) { }
+
+        public override void Feed()
         {
             MissedMeals = 0;
         }
 
-        public void SkipMeal()
+        public override void SkipMeal()
         {
             MissedMeals++;
             if (MissedMeals >= GameRules.HungerDeathDays)
@@ -146,7 +180,7 @@ namespace FLAGGED
             }
         }
 
-        public void GetSick()
+        public override void GetSick()
         {
             if (IsAlive && !IsSick)
             {
@@ -155,13 +189,13 @@ namespace FLAGGED
             }
         }
 
-        public void GiveMedicine()
+        public override void GiveMedicine()
         {
             IsSick = false;
             SickDays = 0;
         }
 
-        public void UntreatedSicknessDay()
+        public override void UntreatedSicknessDay()
         {
             if (IsAlive && IsSick)
             {
@@ -180,7 +214,7 @@ namespace FLAGGED
             CauseOfDeath = cause;
         }
 
-        public string Status
+        public override string Status
         {
             get
             {
@@ -195,6 +229,16 @@ namespace FLAGGED
             }
         }
     }
+    
+    public class HumanMember : FamilyMember
+    {
+        public HumanMember(string name) : base(name) { }
+    }
+
+    public class PetMember : FamilyMember
+    {
+        public PetMember(string name) : base(name) { }
+    }
 }
 
 
@@ -207,13 +251,11 @@ namespace FLAGGED
         public string Name { get; set; } = "";
         public string ArticleValue { get; set; } = "";
 
-        // internal only, never show
         public string OfficialValue { get; set; } = "";
 
-        // terms that player would search for
         public List<string> SearchTerms { get; set; } = new List<string>();
 
-        public bool HasDiscrepancy => // INTERNAL
+        public bool HasDiscrepancy =>
             !string.Equals(ArticleValue, OfficialValue, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -226,17 +268,66 @@ namespace FLAGGED
         public int Difficulty { get; set; } = 1;
         public List<ArticleField> Fields { get; set; } = new List<ArticleField>();
 
-        // internal only, never show
         public string Explanation { get; set; } = "";
-        public bool IsFake => Fields.Any(f => f.HasDiscrepancy);
+
+        public virtual bool IsFake => Fields.Any(f => f.HasDiscrepancy);
+
+        public virtual string GetVerificationDetail(List<string> mismatches)
+        {
+            return mismatches.Count == 0
+                ? "All details matched the official record."
+                : $"Discrepancies found in: {string.Join(", ", mismatches)}.";
+        }
     }
 
-    public class DatabaseRecord
+    public class VerifiedArticle : Article
     {
-        public string Category { get; set; } = "";     // author | domain | statement
-        public string Name { get; set; } = "";         // what the player looks up
-        public string Credibility { get; set; } = "";  // High/Low/Unknown, or issuing office
+        public override bool IsFake => false;
+
+        public override string GetVerificationDetail(List<string> mismatches) =>
+            "All details matched the official record.";
+    }
+
+    public class FabricatedArticle : Article
+    {
+        public override bool IsFake => true;
+
+        public override string GetVerificationDetail(List<string> mismatches) =>
+            $"Discrepancies found in: {string.Join(", ", mismatches)}.";
+    }
+
+    public class DatabaseRecord : IDisplayable
+    {
+        public virtual string Category { get; set; } = "";    
+        public string Name { get; set; } = "";                
+        public string Credibility { get; set; } = "";         
         public string Notes { get; set; } = "";
+
+        public virtual bool Matches(string query)
+        {
+            return ContainsIgnoreCase(Name, query) || ContainsIgnoreCase(Notes, query);
+        }
+
+        public virtual string Display() =>
+            "  [" + Category + "] " + Name + " (" + Credibility + ") - " + Notes;
+
+        protected static bool ContainsIgnoreCase(string text, string query) =>
+            text != null && query != null && text.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    public class AuthorRecord : DatabaseRecord
+    {
+        public override string Category { get; set; } = "Author";
+    }
+
+    public class DomainRecord : DatabaseRecord
+    {
+        public override string Category { get; set; } = "Domain";
+    }
+
+    public class OfficialStatementRecord : DatabaseRecord
+    {
+        public override string Category { get; set; } = "Official Statement";
     }
 
     public class DatabaseSearchResult
@@ -247,7 +338,6 @@ namespace FLAGGED
         public List<DatabaseRecord> Records { get; set; } = new List<DatabaseRecord>();
     }
 
-    // never show these before SubmitJudgment()
     public class ComparisonRow
     {
         public string Field { get; set; } = "";
@@ -259,10 +349,10 @@ namespace FLAGGED
     public class JudgmentResult
     {
         public bool IsCorrect { get; set; }
-        public int PointsDelta { get; set; }  // Derek: +10 correct, -5 wrong
+        public int PointsDelta { get; set; }  
         public string Message { get; set; } = "";
         public bool ShiftEnded { get; set; }
-        public bool WasFake { get; set; }     // for coloring the reveal screen
+        public bool WasFake { get; set; }    
         public List<ComparisonRow> Reveal { get; set; } = new List<ComparisonRow>();
     }
 
@@ -283,16 +373,13 @@ namespace FLAGGED
 
         public void StartShift(int day)
         {
-            if (day <= 1) _usedHeadlines.Clear(); // fresh playthrough
+            if (day <= 1) _usedHeadlines.Clear(); 
             _shiftQueue.Clear();
             LoadArticlesForDay(day);
             NextArticle();
         }
 
         public Article GetCurrentArticle() => _currentArticle;
-
-        private static bool ContainsIgnoreCase(string text, string query) =>
-            text.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
 
         public DatabaseSearchResult SearchDatabase(string query)
         {
@@ -306,7 +393,7 @@ namespace FLAGGED
             }
 
             result.Records = _database
-                .Where(r => ContainsIgnoreCase(r.Name, query) || ContainsIgnoreCase(r.Notes, query))
+                .Where(r => r.Matches(query))
                 .ToList();
 
             result.Found = result.Records.Count > 0;
@@ -314,6 +401,15 @@ namespace FLAGGED
                 ? $"{result.Records.Count} record(s) found."
                 : "NO RECORD FOUND. An unregistered source is itself a red flag — but weigh the whole article.";
             return result;
+        }
+
+        public List<DatabaseRecord> SearchDatabase(IEnumerable<string> terms)
+        {
+            var records = new List<DatabaseRecord>();
+            foreach (var term in terms)
+                foreach (var hit in SearchDatabase(term).Records)
+                    if (!records.Contains(hit)) records.Add(hit);
+            return records;
         }
 
         public DatabaseSearchResult InvestigateField(int fieldIndex)
@@ -326,10 +422,7 @@ namespace FLAGGED
                 ? field.SearchTerms
                 : new List<string> { field.ArticleValue };
 
-            var records = new List<DatabaseRecord>();
-            foreach (var term in terms)
-                foreach (var hit in SearchDatabase(term).Records)
-                    if (!records.Contains(hit)) records.Add(hit);
+            var records = SearchDatabase(terms);
 
             return new DatabaseSearchResult
             {
@@ -341,8 +434,6 @@ namespace FLAGGED
                     : "No records matched this field. No record found is itself a clue."
             };
         }
-
-        // optional rulebook-style browsing
         public List<DatabaseRecord> BrowseDatabase(string category = null) =>
             string.IsNullOrEmpty(category)
                 ? _database
@@ -370,9 +461,7 @@ namespace FLAGGED
                 .ToList();
 
             var mismatches = reveal.Where(r => r.Mismatch).Select(r => r.Field).ToList();
-            string detail = mismatches.Count == 0
-                ? "All details matched the official record."
-                : $"Discrepancies found in: {string.Join(", ", mismatches)}.";
+            string detail = article.GetVerificationDetail(mismatches);
 
             string message = (isCorrect ? "Correct! " : "Incorrect. ") + detail + " " + article.Explanation;
 
@@ -402,14 +491,12 @@ namespace FLAGGED
 
             var available = _articlePool.Where(a => a.Difficulty <= maxDifficulty).ToList();
 
-            // prefer articles player hasn't seen
             var picks = available
                 .Where(a => !_usedHeadlines.Contains(a.Headline))
                 .OrderBy(a => _rng.Next())
                 .Take(count)
                 .ToList();
 
-            // repeat if not enough unseen articles
             if (picks.Count < count)
                 picks.AddRange(available
                     .Where(a => !picks.Contains(a))
@@ -422,12 +509,9 @@ namespace FLAGGED
                 _shiftQueue.Enqueue(a);
             }
         }
-
-        // Database, 10 real 9 fakes
         private List<Article> BuildArticlePool() => new List<Article>
         {
-            // ---------- MAYON VOLCANO ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="PHIVOLCS raises Mayon to Alert Level 3; six-kilometer Permanent Danger Zone strictly off-limits",
                 Author="PHIVOLCS-DOST", Domain="phivolcs.dost.gov.ph",
                 Body="State volcanologists detect intensified magmatic unrest, pyroclastic density currents, and sustained rockfall at Mayon Volcano in Albay. Thousands within the permanent danger zone move to evacuation centers as local governments declare states of calamity.",
@@ -440,7 +524,7 @@ namespace FLAGGED
                     new ArticleField { Name="Exclusion Zone", ArticleValue="Six-kilometer-radius Permanent Danger Zone; entry strictly prohibited", OfficialValue="Six-kilometer-radius Permanent Danger Zone; entry strictly prohibited", SearchTerms=new List<string>{ "Mayon", "Permanent Danger Zone" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="ALERT LEVEL 5 DECLARED OVER MAYON — entire Bicol region ordered to evacuate immediately",
                 Author="PHIVOLCS Monitoring Team", Domain="phivolcs-alerts.com",
                 Body="A post on a copycat volcanology site claims Mayon has been raised to Alert Level 5 and that every resident of Bicol must evacuate at once ahead of a catastrophic eruption.",
@@ -453,9 +537,7 @@ namespace FLAGGED
                     new ArticleField { Name="Evacuation Scope", ArticleValue="Entire Bicol region under mandatory evacuation", OfficialValue="Evacuation limited to residents within the six-kilometer Permanent Danger Zone", SearchTerms=new List<string>{ "Mayon", "Bicol" } }
                 }
             },
-
-            // ---------- DICT GROK BLOCK ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="DICT directs ISPs to block xAI's Grok over non-consensual deepfake imagery",
                 Author="DICT Public Affairs", Domain="dict.gov.ph",
                 Body="The DICT orders internet service providers to block access to xAI's Grok after evidence showed the tool being used to generate non-consensual sexually explicit imagery and deepfakes targeting women and minors.",
@@ -468,7 +550,7 @@ namespace FLAGGED
                     new ArticleField { Name="Reason", ArticleValue="Generation of non-consensual sexually explicit imagery and deepfakes targeting women and minors", OfficialValue="Generation of non-consensual sexually explicit imagery and deepfakes targeting women and minors", SearchTerms=new List<string>{ "Grok", "deepfake" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="AI BANNED! ChatGPT, Gemini, and ALL AI tools blocked nationwide starting Monday!",
                 Author="Viral Manila", Domain="truthviral.ph",
                 Body="Viral posts claim the DICT will block every AI platform in the country and make simply using AI illegal, with fines and jail time for ordinary users.",
@@ -480,9 +562,7 @@ namespace FLAGGED
                     new ArticleField { Name="Claim", ArticleValue="All AI tools blocked nationwide; AI use criminalized", OfficialValue="DICT: block applies only to xAI's Grok; no nationwide AI ban exists", SearchTerms=new List<string>{ "Grok", "AI" } }
                 }
             },
-
-            // ---------- TRILLION PESO MARCH ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="Palace acknowledges public frustration as 'Trillion Peso March' fills Luneta and EDSA Shrine",
                 Author="PCO Media Affairs", Domain="pco.gov.ph",
                 Body="Officials recognize public anger over anomalous flood control projects after tens of thousands join the 'Baha sa Luneta' and 'Trillion Peso March' protests, affirming commitment to administrative overhauls and cooperation with newly formed independent investigative bodies.",
@@ -495,7 +575,7 @@ namespace FLAGGED
                     new ArticleField { Name="Response", ArticleValue="Commitment to administrative overhauls and cooperation with independent investigative bodies", OfficialValue="Commitment to administrative overhauls and cooperation with independent investigative bodies", SearchTerms=new List<string>{ "Trillion Peso March", "flood control" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="MARTIAL LAW TONIGHT: Military to disperse Trillion Peso March protesters, mass arrests ordered!",
                 Author="Anonymous Insider", Domain="pinasconspiracy.net",
                 Body="A viral post claims Malacañang has secretly ordered the military to break up the Luneta and EDSA protests with mass arrests before dawn.",
@@ -507,9 +587,7 @@ namespace FLAGGED
                     new ArticleField { Name="Claim", ArticleValue="Martial law declared; military to disperse protesters and conduct mass arrests", OfficialValue="PCO: no martial law or dispersal order; protests acknowledged, right to peaceful assembly respected", SearchTerms=new List<string>{ "Trillion Peso March", "martial law" } }
                 }
             },
-
-            // ---------- SANDIGANBAYAN WARRANTS ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="PNP serves Sandiganbayan warrants in flood control plunder probe; Revilla surrenders at Camp Crame",
                 Author="PNP Public Information Office", Domain="pnp.gov.ph",
                 Body="The PNP confirms receipt of court orders and the surrender of former senator Bong Revilla at Camp Crame, stating all valid warrants will be executed without fear or favor, with due process and custody safety assured.",
@@ -522,9 +600,7 @@ namespace FLAGGED
                     new ArticleField { Name="Policy", ArticleValue="All valid warrants executed without fear or favor, ensuring due process and safe custody", OfficialValue="All valid warrants executed without fear or favor, ensuring due process and safe custody", SearchTerms=new List<string>{ "warrant", "PNP" } }
                 }
             },
-
-            // ---------- BINALIW LANDFILL ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="Cebu City declares state of calamity after Binaliw landfill collapse kills 36 workers",
                 Author="DENR Public Affairs", Domain="denr.gov.ph",
                 Body="A catastrophic slope failure at the Binaliw sanitary landfill in Cebu City buried operational facilities and personnel, leaving 36 workers dead. The city is under a state of calamity as an emergency environmental review of private solid waste concessions begins.",
@@ -537,7 +613,7 @@ namespace FLAGGED
                     new ArticleField { Name="Declaration", ArticleValue="State of calamity in Cebu City; independent engineering inspections of waste facility slopes ordered", OfficialValue="State of calamity in Cebu City; independent engineering inspections of waste facility slopes ordered", SearchTerms=new List<string>{ "Binaliw", "state of calamity" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="EXPOSED: 'Real' Binaliw death toll is 300+ — government hiding bodies, claims insider",
                 Author="Cebu Truth Channel", Domain="cebu-truthchannel.net",
                 Body="An anonymous post insists the officially reported deaths at the Binaliw landfill collapse are just a fraction of the real figure, accusing officials of concealing additional casualties.",
@@ -549,9 +625,7 @@ namespace FLAGGED
                     new ArticleField { Name="Claim", ArticleValue="Over 300 dead; casualty figures covered up by officials", OfficialValue="DENR/CCDRRMO: 36 confirmed fatalities, publicly reported; state of calamity declared", SearchTerms=new List<string>{ "Binaliw", "death toll" } }
                 }
             },
-
-            // ---------- SUPREME COURT BANK RULING ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="Supreme Court bars banks from unilaterally seizing deceased clients' deposits",
                 Author="Supreme Court Public Information Office", Domain="sc.judiciary.gov.ph",
                 Body="The High Court en banc prohibits banks from unilaterally withholding or transferring funds from deceased depositors' accounts, ruling that balances must be preserved for estate proceedings and lawful heir adjudication.",
@@ -564,7 +638,7 @@ namespace FLAGGED
                     new ArticleField { Name="Reason", ArticleValue="Balances preserved for estate proceedings and legal heir adjudication", OfficialValue="Balances preserved for estate proceedings and legal heir adjudication", SearchTerms=new List<string>{ "estate", "heir" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="Supreme Court orders banks to hand over deceased clients' deposits to the government",
                 Author="Anonymous Whistleblower", Domain="sc-bulletin.ph",
                 Body="A viral 'bulletin' claims the High Court ruled that the accounts of deceased depositors escheat to the State immediately, with heirs required to re-apply for their inheritance.",
@@ -576,9 +650,7 @@ namespace FLAGGED
                     new ArticleField { Name="Ruling", ArticleValue="Deposits of deceased clients turned over to the government; heirs must re-apply", OfficialValue="SC: banks cannot unilaterally withhold or transfer funds; balances preserved for estate settlement and lawful heirs", SearchTerms=new List<string>{ "bank", "deceased" } }
                 }
             },
-
-            // ---------- PH-UAE CEPA ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="Philippines, UAE sign CEPA — country's first free trade accord with a Middle East nation",
                 Author="DTI Communications", Domain="dti.gov.ph",
                 Body="Trade officials sign the Comprehensive Economic Partnership Agreement in Abu Dhabi, cutting tariffs on agricultural exports, expanding bilateral investment, and safeguarding labor protections for overseas Filipino workers.",
@@ -591,7 +663,7 @@ namespace FLAGGED
                     new ArticleField { Name="Coverage", ArticleValue="Lower tariffs on agricultural exports, expanded investments, OFW labor protections", OfficialValue="Lower tariffs on agricultural exports, expanded investments, OFW labor protections", SearchTerms=new List<string>{ "CEPA", "tariff" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="₱100,000 cash aid for every OFW in UAE — register via GCash link before Friday!",
                 Author="OFW Assistance Bureau", Domain="dole-aid.online",
                 Body="A circulating message promises every overseas Filipino worker in the UAE a ₱100,000 payout under the new trade deal, available by registering through a GCash link within 24 hours.",
@@ -603,9 +675,7 @@ namespace FLAGGED
                     new ArticleField { Name="Program", ArticleValue="₱100,000 cash aid for every OFW in the UAE via GCash registration", OfficialValue="DTI: CEPA covers tariffs and investments; no cash aid program exists; never enter credentials via links", SearchTerms=new List<string>{ "CEPA", "OFW" } }
                 }
             },
-
-            // ---------- MALAMPAYA EAST-1 ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="DOE confirms 98 billion cubic feet of recoverable gas at Malampaya East-1",
                 Author="DOE Communications", Domain="doe.gov.ph",
                 Body="Exploration drilling at the offshore Malampaya East-1 field confirms an estimated 98 billion cubic feet of recoverable natural gas, extending the Malampaya gas-to-power project and reducing reliance on imported LNG.",
@@ -618,7 +688,7 @@ namespace FLAGGED
                     new ArticleField { Name="Impact", ArticleValue="Extends the Malampaya gas-to-power project; lowers reliance on imported LNG", OfficialValue="Extends the Malampaya gas-to-power project; lowers reliance on imported LNG", SearchTerms=new List<string>{ "Malampaya", "LNG" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="98 TRILLION cubic feet! PH becomes world's top natural gas exporter under new DOE find",
                 Author="DOE Communications", Domain="doe-updates.com",
                 Body="A post on an unofficial mirror of the DOE site hails the Malampaya East-1 find as instantly transforming the Philippines into the world's leading natural gas exporter.",
@@ -631,9 +701,7 @@ namespace FLAGGED
                     new ArticleField { Name="Claim", ArticleValue="PH becomes the world's top natural gas exporter", OfficialValue="DOE: discovery extends domestic gas-to-power supply; no export program announced", SearchTerms=new List<string>{ "Malampaya", "export" } }
                 }
             },
-
-            // ---------- SABUNGEROS CASE ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="DOJ, CIDG arrest 21 — including 14 cops — in missing sabungeros abductions",
                 Author="DOJ Public Affairs", Domain="doj.gov.ph",
                 Body="Coordinated raids net 21 individuals, among them 14 active and former police officers, as warrants are served against gaming operators accused of orchestrating the abduction and killing of dozens of cockfighting enthusiasts.",
@@ -646,7 +714,7 @@ namespace FLAGGED
                     new ArticleField { Name="Stance", ArticleValue="Justice will spare no one regardless of wealth or rank within the police force", OfficialValue="Justice will spare no one regardless of wealth or rank within the police force", SearchTerms=new List<string>{ "sabungeros", "justice" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="ALL 21 arrested in sabungeros case are police generals — top brass ran the abductions, DOJ 'confirms'",
                 Author="Marites Ng Bayan", Domain="totoongbalita.ph",
                 Body="A gossip account claims every person arrested in the sabungeros manhunt was a police general and that the PNP leadership itself orchestrated the disappearances.",
@@ -658,9 +726,7 @@ namespace FLAGGED
                     new ArticleField { Name="Arrests", ArticleValue="21 police generals arrested; PNP leadership ran the operation", OfficialValue="DOJ/CIDG: 21 individuals arrested, including 14 active and former police officers; gaming operators accused of orchestrating the abductions", SearchTerms=new List<string>{ "sabungeros", "arrest" } }
                 }
             },
-
-            // ---------- PH-JAPAN DEFENSE ----------
-            new Article {
+            new VerifiedArticle {
                 Headline="PH, Japan sign defense logistics pacts; ACSA builds on Reciprocal Access Agreement",
                 Author="DND Public Affairs", Domain="dnd.gov.ph",
                 Body="Manila and Tokyo formalize an Acquisition and Cross-Servicing Agreement allowing the AFP and Japan Self-Defense Forces to exchange fuel, provisions, and logistical support, building on the RAA's framework for a rules-based maritime order.",
@@ -673,7 +739,7 @@ namespace FLAGGED
                     new ArticleField { Name="Context", ArticleValue="Builds on the Reciprocal Access Agreement (RAA); supports interoperability and a rules-based maritime order", OfficialValue="Builds on the Reciprocal Access Agreement (RAA); supports interoperability and a rules-based maritime order", SearchTerms=new List<string>{ "RAA", "Japan" } }
                 }
             },
-            new Article {
+            new FabricatedArticle {
                 Headline="SECRET DEAL: Japanese troops to permanently occupy PH bases; war with China 'within months'",
                 Author="Buzz Clicker", Domain="shockfeed.ph",
                 Body="A sensational post claims the new defense pacts allow Japan to station forces permanently in the Philippines and that conflict with China is imminent.",
@@ -689,71 +755,66 @@ namespace FLAGGED
 
         private List<DatabaseRecord> BuildDatabase() => new List<DatabaseRecord>
         {
-            // ---------- AUTHORS: official ----------
-            new DatabaseRecord { Category="Author", Name="PHIVOLCS-DOST", Credibility="High", Notes="Official volcanology and seismology institute under DOST; issues all Mayon advisories." },
-            new DatabaseRecord { Category="Author", Name="DICT Public Affairs", Credibility="High", Notes="Official ICT department communications." },
-            new DatabaseRecord { Category="Author", Name="PCO Media Affairs", Credibility="High", Notes="Presidential Communications Office press office." },
-            new DatabaseRecord { Category="Author", Name="PNP Public Information Office", Credibility="High", Notes="Official Philippine National Police press office." },
-            new DatabaseRecord { Category="Author", Name="DENR Public Affairs", Credibility="High", Notes="Department of Environment and Natural Resources official updates." },
-            new DatabaseRecord { Category="Author", Name="Supreme Court Public Information Office", Credibility="High", Notes="Official Supreme Court press office." },
-            new DatabaseRecord { Category="Author", Name="DTI Communications", Credibility="High", Notes="Department of Trade and Industry official updates." },
-            new DatabaseRecord { Category="Author", Name="DOE Communications", Credibility="High", Notes="Department of Energy official updates." },
-            new DatabaseRecord { Category="Author", Name="DND Public Affairs", Credibility="High", Notes="Department of National Defense official updates." },
-            new DatabaseRecord { Category="Author", Name="DOJ Public Affairs", Credibility="High", Notes="Department of Justice official updates." },
+            new AuthorRecord { Name="PHIVOLCS-DOST", Credibility="High", Notes="Official volcanology and seismology institute under DOST; issues all Mayon advisories." },
+            new AuthorRecord { Name="DICT Public Affairs", Credibility="High", Notes="Official ICT department communications." },
+            new AuthorRecord { Name="PCO Media Affairs", Credibility="High", Notes="Presidential Communications Office press office." },
+            new AuthorRecord { Name="PNP Public Information Office", Credibility="High", Notes="Official Philippine National Police press office." },
+            new AuthorRecord { Name="DENR Public Affairs", Credibility="High", Notes="Department of Environment and Natural Resources official updates." },
+            new AuthorRecord { Name="Supreme Court Public Information Office", Credibility="High", Notes="Official Supreme Court press office." },
+            new AuthorRecord { Name="DTI Communications", Credibility="High", Notes="Department of Trade and Industry official updates." },
+            new AuthorRecord { Name="DOE Communications", Credibility="High", Notes="Department of Energy official updates." },
+            new AuthorRecord { Name="DND Public Affairs", Credibility="High", Notes="Department of National Defense official updates." },
+            new AuthorRecord { Name="DOJ Public Affairs", Credibility="High", Notes="Department of Justice official updates." },
 
-            // ---------- AUTHORS: unreliable / imitation ----------
-            new DatabaseRecord { Category="Author", Name="Viral Manila", Credibility="Low", Notes="Clickbait page known for sensationalizing local news." },
-            new DatabaseRecord { Category="Author", Name="OFW Assistance Bureau", Credibility="Unknown", Notes="Not a registered DOLE office; common scam nomenclature." },
-            new DatabaseRecord { Category="Author", Name="Anonymous Insider", Credibility="Low", Notes="Unverified identity; frequently posts political conspiracies." },
-            new DatabaseRecord { Category="Author", Name="Cebu Truth Channel", Credibility="Low", Notes="Anonymous local page; known for casualty and crime fabrications." },
-            new DatabaseRecord { Category="Author", Name="Buzz Clicker", Credibility="Low", Notes="Sensationalist writer with exaggerated stories." },
-            new DatabaseRecord { Category="Author", Name="Marites Ng Bayan", Credibility="Low", Notes="Viral gossip account known for twisting crime stories." },
-            new DatabaseRecord { Category="Author", Name="Anonymous Whistleblower", Credibility="Low", Notes="Unverified claims; commonly linked to hoaxes." },
-            new DatabaseRecord { Category="Author", Name="PHIVOLCS Monitoring Team", Credibility="Unknown", Notes="Imitation byline on copycat sites; official advisories are issued as PHIVOLCS-DOST." },
+            new AuthorRecord { Name="Viral Manila", Credibility="Low", Notes="Clickbait page known for sensationalizing local news." },
+            new AuthorRecord { Name="OFW Assistance Bureau", Credibility="Unknown", Notes="Not a registered DOLE office; common scam nomenclature." },
+            new AuthorRecord { Name="Anonymous Insider", Credibility="Low", Notes="Unverified identity; frequently posts political conspiracies." },
+            new AuthorRecord { Name="Cebu Truth Channel", Credibility="Low", Notes="Anonymous local page; known for casualty and crime fabrications." },
+            new AuthorRecord { Name="Buzz Clicker", Credibility="Low", Notes="Sensationalist writer with exaggerated stories." },
+            new AuthorRecord { Name="Marites Ng Bayan", Credibility="Low", Notes="Viral gossip account known for twisting crime stories." },
+            new AuthorRecord { Name="Anonymous Whistleblower", Credibility="Low", Notes="Unverified claims; commonly linked to hoaxes." },
+            new AuthorRecord { Name="PHIVOLCS Monitoring Team", Credibility="Unknown", Notes="Imitation byline on copycat sites; official advisories are issued as PHIVOLCS-DOST." },
 
-            // ---------- DOMAINS: official ----------
-            new DatabaseRecord { Category="Domain", Name="phivolcs.dost.gov.ph", Credibility="High", Notes="DOST-PHIVOLCS official site." },
-            new DatabaseRecord { Category="Domain", Name="dict.gov.ph", Credibility="High", Notes="Department of Information and Communications Technology." },
-            new DatabaseRecord { Category="Domain", Name="pco.gov.ph", Credibility="High", Notes="Presidential Communications Office." },
-            new DatabaseRecord { Category="Domain", Name="pnp.gov.ph", Credibility="High", Notes="Philippine National Police official portal." },
-            new DatabaseRecord { Category="Domain", Name="denr.gov.ph", Credibility="High", Notes="Department of Environment and Natural Resources." },
-            new DatabaseRecord { Category="Domain", Name="sc.judiciary.gov.ph", Credibility="High", Notes="Supreme Court of the Philippines official portal." },
-            new DatabaseRecord { Category="Domain", Name="dti.gov.ph", Credibility="High", Notes="Department of Trade and Industry." },
-            new DatabaseRecord { Category="Domain", Name="doe.gov.ph", Credibility="High", Notes="Department of Energy." },
-            new DatabaseRecord { Category="Domain", Name="dnd.gov.ph", Credibility="High", Notes="Department of National Defense." },
-            new DatabaseRecord { Category="Domain", Name="doj.gov.ph", Credibility="High", Notes="Department of Justice." },
+            new DomainRecord { Name="phivolcs.dost.gov.ph", Credibility="High", Notes="DOST-PHIVOLCS official site." },
+            new DomainRecord { Name="dict.gov.ph", Credibility="High", Notes="Department of Information and Communications Technology." },
+            new DomainRecord { Name="pco.gov.ph", Credibility="High", Notes="Presidential Communications Office." },
+            new DomainRecord { Name="pnp.gov.ph", Credibility="High", Notes="Philippine National Police official portal." },
+            new DomainRecord { Name="denr.gov.ph", Credibility="High", Notes="Department of Environment and Natural Resources." },
+            new DomainRecord { Name="sc.judiciary.gov.ph", Credibility="High", Notes="Supreme Court of the Philippines official portal." },
+            new DomainRecord { Name="dti.gov.ph", Credibility="High", Notes="Department of Trade and Industry." },
+            new DomainRecord { Name="doe.gov.ph", Credibility="High", Notes="Department of Energy." },
+            new DomainRecord { Name="dnd.gov.ph", Credibility="High", Notes="Department of National Defense." },
+            new DomainRecord { Name="doj.gov.ph", Credibility="High", Notes="Department of Justice." },
 
-            // ---------- DOMAINS: unregistered / imitation ----------
-            new DatabaseRecord { Category="Domain", Name="truthviral.ph", Credibility="Low", Notes="Frequently publishes exaggerated local rumors." },
-            new DatabaseRecord { Category="Domain", Name="dole-aid.online", Credibility="Unknown", Notes="Recently created imitation domain; not affiliated with DOLE. Official DOLE domain: dole.gov.ph." },
-            new DatabaseRecord { Category="Domain", Name="pinasconspiracy.net", Credibility="Low", Notes="Hub for political and national security conspiracies." },
-            new DatabaseRecord { Category="Domain", Name="cebu-truthchannel.net", Credibility="Low", Notes="Unregistered anonymous page; not a news organization." },
-            new DatabaseRecord { Category="Domain", Name="shockfeed.ph", Credibility="Low", Notes="Clickbait and sensationalist content." },
-            new DatabaseRecord { Category="Domain", Name="totoongbalita.ph", Credibility="Low", Notes="Gossip-hybrid site; stories routinely distorted." },
-            new DatabaseRecord { Category="Domain", Name="doe-updates.com", Credibility="Unknown", Notes="Unofficial imitation site; not affiliated with the DOE. Official domain: doe.gov.ph." },
-            new DatabaseRecord { Category="Domain", Name="phivolcs-alerts.com", Credibility="Unknown", Notes="Copycat volcanology site; not affiliated with DOST-PHIVOLCS. Official domain: phivolcs.dost.gov.ph." },
-            new DatabaseRecord { Category="Domain", Name="sc-bulletin.ph", Credibility="Unknown", Notes="Imitation site; not affiliated with the Supreme Court. Official domain: sc.judiciary.gov.ph." },
+            new DomainRecord { Name="truthviral.ph", Credibility="Low", Notes="Frequently publishes exaggerated local rumors." },
+            new DomainRecord { Name="dole-aid.online", Credibility="Unknown", Notes="Recently created imitation domain; not affiliated with DOLE. Official DOLE domain: dole.gov.ph." },
+            new DomainRecord { Name="pinasconspiracy.net", Credibility="Low", Notes="Hub for political and national security conspiracies." },
+            new DomainRecord { Name="cebu-truthchannel.net", Credibility="Low", Notes="Unregistered anonymous page; not a news organization." },
+            new DomainRecord { Name="shockfeed.ph", Credibility="Low", Notes="Clickbait and sensationalist content." },
+            new DomainRecord { Name="totoongbalita.ph", Credibility="Low", Notes="Gossip-hybrid site; stories routinely distorted." },
+            new DomainRecord { Name="doe-updates.com", Credibility="Unknown", Notes="Unofficial imitation site; not affiliated with the DOE. Official domain: doe.gov.ph." },
+            new DomainRecord { Name="phivolcs-alerts.com", Credibility="Unknown", Notes="Copycat volcanology site; not affiliated with DOST-PHIVOLCS. Official domain: phivolcs.dost.gov.ph." },
+            new DomainRecord { Name="sc-bulletin.ph", Credibility="Unknown", Notes="Imitation site; not affiliated with the Supreme Court. Official domain: sc.judiciary.gov.ph." },
 
-            // ---------- OFFICIAL STATEMENTS: verify claims here ----------
-            new DatabaseRecord { Category="Official Statement", Name="Mayon Volcano Alert", Credibility="DOST-PHIVOLCS",
+            new OfficialStatementRecord { Name="Mayon Volcano Alert", Credibility="DOST-PHIVOLCS",
                 Notes="DOST-PHIVOLCS has Mayon Volcano at Alert Level 3 (intensified magmatic unrest, pyroclastic density currents, rockfall). The six-kilometer-radius Permanent Danger Zone is strictly off-limits; residents within it are evacuated and local governments have declared states of calamity. There is NO Alert Level 5 and NO regionwide Bicol evacuation order." },
-            new DatabaseRecord { Category="Official Statement", Name="Grok Platform Block", Credibility="DICT",
+            new OfficialStatementRecord { Name="Grok Platform Block", Credibility="DICT",
                 Notes="The DICT directed internet service providers to block xAI's Grok after evidence it was used to generate non-consensual sexually explicit imagery and deepfakes of women and minors. The block applies ONLY to Grok. There is no nationwide ban on AI tools such as ChatGPT or Gemini, and AI use is not criminalized." },
-            new DatabaseRecord { Category="Official Statement", Name="Trillion Peso March Protests", Credibility="PCO / Malacañang",
+            new OfficialStatementRecord { Name="Trillion Peso March Protests", Credibility="PCO / Malacañang",
                 Notes="Tens of thousands gathered at Luneta and the EDSA Shrine ('Baha sa Luneta' / 'Trillion Peso March') over ghost and substandard flood control projects. The Palace acknowledged public frustration and committed to administrative overhauls and cooperation with independent investigative bodies. There is NO martial law or dispersal order." },
-            new DatabaseRecord { Category="Official Statement", Name="Binaliw Landfill Collapse", Credibility="DENR / CCDRRMO",
+            new OfficialStatementRecord { Name="Binaliw Landfill Collapse", Credibility="DENR / CCDRRMO",
                 Notes="The Binaliw sanitary landfill slope collapse in Cebu City killed 36 workers. Cebu City is under a state of calamity, and independent engineering inspections of waste facility slopes are underway. The death toll of 36 has been publicly reported since the incident; there is no cover-up." },
-            new DatabaseRecord { Category="Official Statement", Name="Malampaya East-1 Gas Discovery", Credibility="DOE",
+            new OfficialStatementRecord { Name="Malampaya East-1 Gas Discovery", Credibility="DOE",
                 Notes="The Department of Energy (DOE) confirmed an estimated 98 billion cubic feet of recoverable natural gas at Malampaya East-1, extending the Malampaya gas-to-power project and reducing reliance on imported LNG for Luzon's power supply. There is NO gas export program and NO free electricity program." },
-            new DatabaseRecord { Category="Official Statement", Name="Sabungeros Abduction Case", Credibility="DOJ / CIDG",
+            new OfficialStatementRecord { Name="Sabungeros Abduction Case", Credibility="DOJ / CIDG",
                 Notes="Coordinated DOJ and CIDG raids arrested 21 individuals — including 14 active and former police officers — over the abduction and killing of cockfighting enthusiasts ('sabungeros'). Warrants also targeted gaming operators accused of orchestrating the disappearances. The DOJ says the pursuit of justice will spare no one regardless of wealth or rank." },
-            new DatabaseRecord { Category="Official Statement", Name="PH-Japan Defense Agreements", Credibility="DND",
+            new OfficialStatementRecord { Name="PH-Japan Defense Agreements", Credibility="DND",
                 Notes="The Acquisition and Cross-Servicing Agreement (ACSA) allows the AFP and Japan Self-Defense Forces to exchange fuel, provisions, and logistical support, building on the Reciprocal Access Agreement (RAA). The pacts strengthen interoperability and deterrence; they do NOT allow permanent foreign basing or occupation of Philippine bases." },
-            new DatabaseRecord { Category="Official Statement", Name="Deceased Depositors' Bank Accounts", Credibility="Supreme Court",
+            new OfficialStatementRecord { Name="Deceased Depositors' Bank Accounts", Credibility="Supreme Court",
                 Notes="The Supreme Court en banc prohibited banks from unilaterally withholding or transferring funds of deceased depositors. Balances must be preserved for estate settlement and lawful heir adjudication. Deposits are NOT turned over to the government, and banks do not gain ownership of deceased clients' funds." },
-            new DatabaseRecord { Category="Official Statement", Name="PH-UAE CEPA Trade Deal", Credibility="DTI",
+            new OfficialStatementRecord { Name="PH-UAE CEPA Trade Deal", Credibility="DTI",
                 Notes="The Comprehensive Economic Partnership Agreement (CEPA), signed in Abu Dhabi, is the Philippines' first free trade accord with a Middle Eastern nation. It cuts tariffs on agricultural exports, expands bilateral investment, and safeguards OFW labor protections. There is NO cash aid or GCash registration program attached to the deal." },
-            new DatabaseRecord { Category="Official Statement", Name="Flood Control Plunder Probe", Credibility="Sandiganbayan / PNP",
+            new OfficialStatementRecord { Name="Flood Control Plunder Probe", Credibility="Sandiganbayan / PNP",
                 Notes="The Sandiganbayan issued arrest warrants for lawmakers and public works officials implicated in the multi-billion-peso flood control budget scandal; former senator Bong Revilla surrendered to the PNP at Camp Crame. The PNP states all valid warrants will be executed without fear or favor, with due process observed." }
         };
     }
@@ -816,15 +877,20 @@ namespace FLAGGED
         public GameSession(CoreGameLogic core,
                            string firstMemberName = "Family Member 1",
                            string secondMemberName = "Family Member 2")
+            : this(core, new List<FamilyMember>
+            {
+                new HumanMember(firstMemberName),
+                new PetMember(secondMemberName)
+            })
+        {
+        }
+
+        public GameSession(CoreGameLogic core, List<FamilyMember> family)
         {
             _core = core;
             Wallet = new Wallet(GameRules.StartingMoney);
             Timer = new ShiftTimer();
-            Family = new List<FamilyMember>
-            {
-                new FamilyMember(firstMemberName),
-                new FamilyMember(secondMemberName)
-            };
+            Family = family;
         }
 
         public bool IsGameOver => _rentFailed || _allDead || CurrentDay > GameRules.TotalDays;
@@ -1159,12 +1225,11 @@ namespace FLAGGED
         {
             foreach (FamilyMember member in Family)
             {
-                report.FamilyStatus.Add(member.Name + " - " + member.Status);
+                report.FamilyStatus.Add(member.Display());
             }
         }
     }
 }
-
 
 
 namespace FLAGGED
@@ -1254,8 +1319,7 @@ namespace FLAGGED
                         Console.WriteLine(found.Message);
                         foreach (DatabaseRecord record in found.Records)
                         {
-                            Console.WriteLine("  [" + record.Category + "] " + record.Name +
-                                              " (" + record.Credibility + ") - " + record.Notes);
+                            Console.WriteLine(record.Display());
                         }
                         Console.WriteLine("[" + game.Timer.Format() + "]");
                     }
@@ -1292,7 +1356,7 @@ namespace FLAGGED
                     FamilyMember member = game.Family[i];
                     if (!member.IsAlive) continue;
 
-                    Console.WriteLine(member.Name + " - " + member.Status);
+                    Console.WriteLine(member.Display());
                     choices.FeedMember[i] = AskYesNo("Buy food for " + member.Name + " ($" + GameRules.FoodCostPerMember + ")?");
 
                     if (member.IsSick)
